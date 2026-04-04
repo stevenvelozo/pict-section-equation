@@ -1,0 +1,30 @@
+{
+	"name": "pict-section-equation-example-solve-explorer",
+	"version": "0.0.1",
+	"description": "Expression Solve Explorer Example Application",
+	"main": "source/Pict-Application-SolveExplorer.js",
+	"scripts": {
+		"start": "node source/Pict-Application-SolveExplorer.js",
+		"build": "npx quack build && npx quack copy"
+	},
+	"author": "steven velozo <steven@velozo.com>",
+	"license": "MIT",
+	"copyFilesSettings": {
+		"whenFileExists": "overwrite"
+	},
+	"copyFiles": [
+		{
+			"from": "./html/*",
+			"to": "./dist/"
+		},
+		{
+			"from": "../../node_modules/pict/dist/*",
+			"to": "./dist/"
+		}
+	],
+	"dependencies": {
+		"pict": "^1.0.357",
+		"pict-application": "^1.0.28",
+		"pict-section-equation": "file:../../"
+	}
+}

@@ -1,0 +1,49 @@
+{
+	"name": "pict-section-equation",
+	"version": "0.0.1",
+	"description": "Pict Section for Expression Parser Solve Visualization",
+	"main": "source/Pict-Section-Equation.js",
+	"scripts": {
+		"test": "npx mocha -u tdd -R spec",
+		"tests": "npx mocha -u tdd -R spec -g",
+		"start": "node source/Pict-Section-Equation.js",
+		"coverage": "./node_modules/.bin/nyc --reporter=lcov --reporter=text-lcov ./node_modules/mocha/bin/_mocha -- -u tdd -R spec",
+		"build": "npx quack build"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/stevenvelozo/pict-section-equation.git"
+	},
+	"author": "steven velozo <steven@velozo.com>",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/stevenvelozo/pict-section-equation/issues"
+	},
+	"homepage": "https://github.com/stevenvelozo/pict-section-equation#readme",
+	"mocha": {
+		"diff": true,
+		"extension": [
+			"js"
+		],
+		"package": "./package.json",
+		"reporter": "spec",
+		"slow": "75",
+		"timeout": "5000",
+		"ui": "tdd",
+		"watch-files": [
+			"source/**/*.js",
+			"test/**/*.js"
+		],
+		"watch-ignore": [
+			"lib/vendor"
+		]
+	},
+	"dependencies": {
+		"pict-view": "^1.0.67"
+	},
+	"devDependencies": {
+		"browser-env": "^3.3.0",
+		"pict": "^1.0.357",
+		"quackage": "^1.0.64"
+	}
+}
