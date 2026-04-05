@@ -20,11 +20,17 @@
 		{
 			"from": "../../node_modules/pict/dist/*",
 			"to": "./dist/"
+		},
+		{
+			"from": "../../node_modules/pict-section-code/example_applications/code_editor/html/codejar.js",
+			"to": "./dist/codejar.js"
 		}
 	],
 	"dependencies": {
 		"pict": "^1.0.357",
 		"pict-application": "^1.0.28",
-		"pict-section-equation": "file:../../"
+		"pict-section-code": "^1.0.0",
+		"pict-section-equation": "file:../../",
+		"pict-section-modal": "^0.0.1"
 	}
 }

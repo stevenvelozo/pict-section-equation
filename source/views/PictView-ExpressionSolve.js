@@ -87,6 +87,107 @@ class PictViewExpressionSolve extends libPictViewClass
 			.replace(/"/g, '&quot;');
 	}
 
+	/**
+	 * Format a numeric value for display, truncating excessive decimal precision.
+	 * Numbers with more than 10 digits after the decimal are truncated with an
+	 * italic ellipsis showing remaining digit count.  Integers longer than 15
+	 * digits use scientific notation.
+	 */
+	formatNumericValue(pValue)
+	{
+		if (pValue === undefined || pValue === null)
+		{
+			return '';
+		}
+		let tmpStr = String(pValue);
+		// Check if the string representation is numeric (handles number, Big.js, numeric strings)
+		if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(tmpStr))
+		{
+			return this.escapeHTML(tmpStr);
+		}
+		let tmpDotIndex = tmpStr.indexOf('.');
+		if (tmpDotIndex >= 0)
+		{
+			// Check for exponent notation in the string (e.g. from Big.js)
+			let tmpEIndex = tmpStr.search(/e/i);
+			let tmpDecimalPart = (tmpEIndex >= 0) ? tmpStr.substring(tmpDotIndex + 1, tmpEIndex) : tmpStr.substring(tmpDotIndex + 1);
+			if (tmpDecimalPart.length > 10)
+			{
+				let tmpTruncated = tmpStr.substring(0, tmpDotIndex + 11);
+				let tmpRemaining = tmpDecimalPart.length - 10;
+				let tmpFullEscaped = this.escapeHTML(tmpStr);
+				return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpTruncated}<i style="color:#6b7280; font-style:italic;">...${tmpRemaining} more...</i></span>`;
+			}
+			return tmpStr;
+		}
+		// Large integers: use scientific notation
+		let tmpAbsDigits = tmpStr.replace('-', '').length;
+		if (tmpAbsDigits > 15)
+		{
+			let tmpSciNotation = '';
+			if (typeof(pValue) === 'number')
+			{
+				tmpSciNotation = pValue.toExponential(10);
+			}
+			else
+			{
+				// For Big.js or string values, format manually
+				let tmpSign = tmpStr.startsWith('-') ? '-' : '';
+				let tmpDigits = tmpStr.replace('-', '');
+				let tmpMantissa = tmpDigits[0] + '.' + tmpDigits.substring(1, 11);
+				let tmpExponent = tmpDigits.length - 1;
+				tmpSciNotation = `${tmpSign}${tmpMantissa}e+${tmpExponent}`;
+			}
+			let tmpFullEscaped = this.escapeHTML(tmpStr);
+			return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpSciNotation}</span>`;
+		}
+		return tmpStr;
+	}
+
+	/**
+	 * Attach richTooltip from PictSectionModal to all truncated value spans
+	 * within the given container element.
+	 */
+	attachTruncatedValueTooltips(pContainerSelector)
+	{
+		if (typeof document === 'undefined')
+		{
+			return;
+		}
+		let tmpModal = this.pict.views.PictSectionModal;
+		if (!tmpModal)
+		{
+			return;
+		}
+
+		// Clean up any previously attached tooltips
+		if (!this._truncatedValueTooltips)
+		{
+			this._truncatedValueTooltips = [];
+		}
+		for (let i = 0; i < this._truncatedValueTooltips.length; i++)
+		{
+			this._truncatedValueTooltips[i].destroy();
+		}
+		this._truncatedValueTooltips = [];
+
+		let tmpContainer = document.querySelector(pContainerSelector);
+		if (!tmpContainer)
+		{
+			return;
+		}
+		let tmpSpans = tmpContainer.querySelectorAll('.peq-truncated-value');
+		for (let i = 0; i < tmpSpans.length; i++)
+		{
+			let tmpSpan = tmpSpans[i];
+			let tmpFullValue = tmpSpan.getAttribute('data-full-value');
+			let tmpTotalDigits = tmpSpan.getAttribute('data-total-digits');
+			let tmpTooltipHTML = `<div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace; font-size:12px; line-height:1.6; max-width:400px;"><div style="color:#94a3b8; font-size:11px; margin-bottom:4px;">${tmpTotalDigits} characters</div><div style="word-break:break-all; color:#f1f5f9;">${tmpFullValue}</div></div>`;
+			let tmpHandle = tmpModal.richTooltip(tmpSpan, tmpTooltipHTML, { position: 'top', delay: 100, maxWidth: '450px', interactive: true });
+			this._truncatedValueTooltips.push(tmpHandle);
+		}
+	}
+
 	getVirtualSymbolValue(pToken, pResultObject)
 	{
 		if (!pToken || !pResultObject)
@@ -96,7 +197,7 @@ class PictViewExpressionSolve extends libPictViewClass
 
 		if ((pToken.Type === 'Token.Symbol' || pToken.Type === 'Token.Constant') && ('Value' in pToken))
 		{
-			return String(pToken.Value);
+			return this.formatNumericValue(pToken.Value);
 		}
 
 		let tmpVirtualSymbolName = ('VirtualSymbolName' in pToken) ? pToken.VirtualSymbolName
@@ -114,7 +215,7 @@ class PictViewExpressionSolve extends libPictViewClass
 			{
 				return `[${tmpValue.length} items]`;
 			}
-			return String(tmpValue);
+			return this.formatNumericValue(tmpValue);
 		}
 
 		return String(pToken.Token);
@@ -340,7 +441,7 @@ class PictViewExpressionSolve extends libPictViewClass
 
 		if (tmpValue && tmpValue !== tmpTokenText)
 		{
-			return `<span style="color:${tmpColor}">${tmpTokenText}</span> <span style="color:#94a3b8">=</span> <span style="color:#0f172a">${this.escapeHTML(tmpValue)}</span>`;
+			return `<span style="color:${tmpColor}">${tmpTokenText}</span> <span style="color:#94a3b8">=</span> <span style="color:#0f172a">${tmpValue}</span>`;
 		}
 		return `<span style="color:${tmpColor}">${tmpTokenText}</span>`;
 	}
@@ -370,7 +471,7 @@ class PictViewExpressionSolve extends libPictViewClass
 			}
 			else
 			{
-				tmpResultValue = String(tmpRawResult);
+				tmpResultValue = this.formatNumericValue(tmpRawResult);
 			}
 		}
 
@@ -396,7 +497,7 @@ class PictViewExpressionSolve extends libPictViewClass
 			<td class="peq-step-num">${pIndex}</td>
 			<td class="peq-step-symbol">${this.escapeHTML(tmpVirtualSymbolName)}</td>
 			<td>${tmpExpressionHTML}</td>
-			<td class="peq-step-result">${this.escapeHTML(tmpResultValue)}</td>
+			<td class="peq-step-result">${tmpResultValue}</td>
 		</tr>`;
 	}
 
@@ -454,12 +555,12 @@ class PictViewExpressionSolve extends libPictViewClass
 			}
 			else
 			{
-				tmpDisplayValue = String(tmpValue);
+				tmpDisplayValue = this.formatNumericValue(tmpValue);
 			}
 
 			tmpRows += `<tr>
 				<td style="color:#7c3aed; font-weight:600;">${this.escapeHTML(tmpKey)}</td>
-				<td>${this.escapeHTML(tmpDisplayValue)}</td>
+				<td>${tmpDisplayValue}</td>
 			</tr>`;
 		}
 
@@ -530,8 +631,9 @@ class PictViewExpressionSolve extends libPictViewClass
 		let tmpResultDisplay = '';
 		if (tmpRawResult !== '')
 		{
-			let tmpResultLabel = tmpAssignmentAddress ? `${tmpAssignmentAddress} = ${tmpRawResult}` : `Result: ${tmpRawResult}`;
-			tmpResultDisplay = `<div class="peq-header-result">${this.escapeHTML(tmpResultLabel)}</div>`;
+			let tmpFormattedResult = this.formatNumericValue(tmpRawResult);
+			let tmpResultLabel = tmpAssignmentAddress ? `${this.escapeHTML(tmpAssignmentAddress)} = ${tmpFormattedResult}` : `Result: ${tmpFormattedResult}`;
+			tmpResultDisplay = `<div class="peq-header-result">${tmpResultLabel}</div>`;
 		}
 
 		return `${this.buildCSS()}
@@ -566,6 +668,7 @@ class PictViewExpressionSolve extends libPictViewClass
 	{
 		let tmpContent = this.buildVisualizationHTML();
 		this.services.ContentAssignment.assignContent('#PictSectionEquation-ExpressionSolve', tmpContent);
+		this.attachTruncatedValueTooltips('#PictSectionEquation-ExpressionSolve');
 	}
 
 	onAfterRender()

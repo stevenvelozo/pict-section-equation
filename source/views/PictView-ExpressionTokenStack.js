@@ -103,6 +103,107 @@ class PictViewExpressionTokenStack extends libPictViewClass
 	}
 
 	/**
+	 * Format a numeric value for display, truncating excessive decimal precision.
+	 * Numbers with more than 10 digits after the decimal are truncated with an
+	 * italic ellipsis showing remaining digit count.  Integers longer than 15
+	 * digits use scientific notation.
+	 */
+	formatNumericValue(pValue)
+	{
+		if (pValue === undefined || pValue === null)
+		{
+			return '';
+		}
+		let tmpStr = String(pValue);
+		// Check if the string representation is numeric (handles number, Big.js, numeric strings)
+		if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(tmpStr))
+		{
+			return this.escapeHTML(tmpStr);
+		}
+		let tmpDotIndex = tmpStr.indexOf('.');
+		if (tmpDotIndex >= 0)
+		{
+			// Check for exponent notation in the string (e.g. from Big.js)
+			let tmpEIndex = tmpStr.search(/e/i);
+			let tmpDecimalPart = (tmpEIndex >= 0) ? tmpStr.substring(tmpDotIndex + 1, tmpEIndex) : tmpStr.substring(tmpDotIndex + 1);
+			if (tmpDecimalPart.length > 10)
+			{
+				let tmpTruncated = tmpStr.substring(0, tmpDotIndex + 11);
+				let tmpRemaining = tmpDecimalPart.length - 10;
+				let tmpFullEscaped = this.escapeHTML(tmpStr);
+				return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpTruncated}<i style="color:#6b7280; font-style:italic;">...${tmpRemaining} more...</i></span>`;
+			}
+			return tmpStr;
+		}
+		// Large integers: use scientific notation
+		let tmpAbsDigits = tmpStr.replace('-', '').length;
+		if (tmpAbsDigits > 15)
+		{
+			let tmpSciNotation = '';
+			if (typeof(pValue) === 'number')
+			{
+				tmpSciNotation = pValue.toExponential(10);
+			}
+			else
+			{
+				// For Big.js or string values, format manually
+				let tmpSign = tmpStr.startsWith('-') ? '-' : '';
+				let tmpDigits = tmpStr.replace('-', '');
+				let tmpMantissa = tmpDigits[0] + '.' + tmpDigits.substring(1, 11);
+				let tmpExponent = tmpDigits.length - 1;
+				tmpSciNotation = `${tmpSign}${tmpMantissa}e+${tmpExponent}`;
+			}
+			let tmpFullEscaped = this.escapeHTML(tmpStr);
+			return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpSciNotation}</span>`;
+		}
+		return tmpStr;
+	}
+
+	/**
+	 * Attach richTooltip from PictSectionModal to all truncated value spans
+	 * within the given container element.
+	 */
+	attachTruncatedValueTooltips(pContainerSelector)
+	{
+		if (typeof document === 'undefined')
+		{
+			return;
+		}
+		let tmpModal = this.pict.views.PictSectionModal;
+		if (!tmpModal)
+		{
+			return;
+		}
+
+		// Clean up any previously attached tooltips
+		if (!this._truncatedValueTooltips)
+		{
+			this._truncatedValueTooltips = [];
+		}
+		for (let i = 0; i < this._truncatedValueTooltips.length; i++)
+		{
+			this._truncatedValueTooltips[i].destroy();
+		}
+		this._truncatedValueTooltips = [];
+
+		let tmpContainer = document.querySelector(pContainerSelector);
+		if (!tmpContainer)
+		{
+			return;
+		}
+		let tmpSpans = tmpContainer.querySelectorAll('.peq-truncated-value');
+		for (let i = 0; i < tmpSpans.length; i++)
+		{
+			let tmpSpan = tmpSpans[i];
+			let tmpFullValue = tmpSpan.getAttribute('data-full-value');
+			let tmpTotalDigits = tmpSpan.getAttribute('data-total-digits');
+			let tmpTooltipHTML = `<div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace; font-size:12px; line-height:1.6; max-width:400px;"><div style="color:#94a3b8; font-size:11px; margin-bottom:4px;">${tmpTotalDigits} characters</div><div style="word-break:break-all; color:#f1f5f9;">${tmpFullValue}</div></div>`;
+			let tmpHandle = tmpModal.richTooltip(tmpSpan, tmpTooltipHTML, { position: 'top', delay: 100, maxWidth: '450px', interactive: true });
+			this._truncatedValueTooltips.push(tmpHandle);
+		}
+	}
+
+	/**
 	 * Group PostfixTokenObjects by SolveLayerStack, preserving order.
 	 * Returns an array of { layerId, depth, tokens[] } sorted deepest-first.
 	 */
@@ -172,7 +273,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 			{
 				return `[${tmpValue.length} items]`;
 			}
-			return String(tmpValue);
+			return this.formatNumericValue(tmpValue);
 		}
 
 		return '';
@@ -384,6 +485,18 @@ class PictViewExpressionTokenStack extends libPictViewClass
 				color: #475569;
 				border: 1px solid #e2e8f0;
 			}
+			.peq-ts-eval-stack-badge
+			{
+				display: inline-block;
+				padding: 2px 8px;
+				border-radius: 10px;
+				font-size: 10px;
+				font-weight: 600;
+				background: #e2e8f0;
+				color: #475569;
+				cursor: default;
+				letter-spacing: 0.02em;
+			}
 			.peq-ts-empty
 			{
 				text-align: center;
@@ -409,7 +522,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 		let tmpResolvedDisplay = '';
 		if (pToken.Value !== undefined && pToken.Value !== null && String(pToken.Value) !== pToken.Token)
 		{
-			tmpResolvedDisplay = `<div style="font-size:10px; color:#059669; font-weight:600;">${this.escapeHTML(String(pToken.Value))}</div>`;
+			tmpResolvedDisplay = `<div style="font-size:10px; color:#059669; font-weight:600;">${this.formatNumericValue(pToken.Value)}</div>`;
 		}
 
 		return `<div class="peq-ts-token${tmpVRefClass}" style="border-color:${tmpColor}40">
@@ -427,7 +540,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 		let tmpValueDisplay = '';
 		if (tmpResolvedValue)
 		{
-			tmpValueDisplay = `<span class="peq-ts-frame-value">= ${this.escapeHTML(tmpResolvedValue)}</span>`;
+			tmpValueDisplay = `<span class="peq-ts-frame-value">= ${tmpResolvedValue}</span>`;
 		}
 
 		let tmpTokensHTML = '';
@@ -500,7 +613,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 			{
 				return `[${tmpVal.length}]`;
 			}
-			return String(tmpVal);
+			return this.formatNumericValue(tmpVal);
 		}
 		return '';
 	}
@@ -522,7 +635,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 		}
 		if ((pToken.Type === 'Token.Symbol' || pToken.Type === 'Token.Constant') && pToken.Value !== undefined)
 		{
-			return this.escapeHTML(String(pToken.Value));
+			return this.formatNumericValue(pToken.Value);
 		}
 		if (pToken.Type === 'Token.VirtualSymbol' || pToken.Type === 'Token.Parenthesis')
 		{
@@ -530,7 +643,7 @@ class PictViewExpressionTokenStack extends libPictViewClass
 			let tmpVal = this.getVirtualSymbolValue(tmpName, pResultObject);
 			if (tmpVal)
 			{
-				return this.escapeHTML(tmpVal);
+				return tmpVal;
 			}
 		}
 		return this.escapeHTML(pToken.Token);
@@ -573,25 +686,33 @@ class PictViewExpressionTokenStack extends libPictViewClass
 			let tmpResultVal = this.getVirtualSymbolValue(tmpVName, pResultObject);
 			if (tmpOpToken === '=')
 			{
-				tmpResolvedHTML = `${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)} &rarr; <span style="color:#059669; font-weight:600;">${this.escapeHTML(tmpResultVal)}</span>`;
+				tmpResolvedHTML = `${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)} &rarr; <span style="color:#059669; font-weight:600;">${tmpResultVal}</span>`;
 			}
 			else if (tmpVPrefix === 'VFE')
 			{
-				tmpResolvedHTML = `${this.escapeHTML(tmpOpToken)}(${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)}) &rarr; <span style="color:#059669; font-weight:600;">${this.escapeHTML(tmpResultVal)}</span>`;
+				tmpResolvedHTML = `${this.escapeHTML(tmpOpToken)}(${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)}) &rarr; <span style="color:#059669; font-weight:600;">${tmpResultVal}</span>`;
 			}
 			else
 			{
-				tmpResolvedHTML = `${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)} ${this.escapeHTML(tmpOpToken)} ${this.buildResolvedOperandText(tmpOp.RightValue, pResultObject)} &rarr; <span style="color:#059669; font-weight:600;">${this.escapeHTML(tmpResultVal)}</span>`;
+				tmpResolvedHTML = `${this.buildResolvedOperandText(tmpOp.LeftValue, pResultObject)} ${this.escapeHTML(tmpOpToken)} ${this.buildResolvedOperandText(tmpOp.RightValue, pResultObject)} &rarr; <span style="color:#059669; font-weight:600;">${tmpResultVal}</span>`;
 			}
 
-			// Build the growing symbol stack
+			// Build the growing symbol stack (stored as data for tooltip)
 			tmpSymbolsSoFar.push(tmpVName);
-			let tmpStackHTML = '';
+			let tmpTooltipLines = [];
 			for (let j = 0; j < tmpSymbolsSoFar.length; j++)
 			{
-				let tmpSymClass = (j === tmpSymbolsSoFar.length - 1) ? 'peq-ts-eval-sym-new' : 'peq-ts-eval-sym-existing';
 				let tmpSymVal = this.getVirtualSymbolValue(tmpSymbolsSoFar[j], pResultObject);
-				tmpStackHTML += `<span class="peq-ts-eval-sym ${tmpSymClass}" title="${this.escapeHTML(tmpSymbolsSoFar[j])}">${this.escapeHTML(tmpSymbolsSoFar[j])}=${this.escapeHTML(tmpSymVal)}</span>`;
+				let tmpIsNew = (j === tmpSymbolsSoFar.length - 1);
+				tmpTooltipLines.push({ name: tmpSymbolsSoFar[j], value: tmpSymVal, isNew: tmpIsNew });
+			}
+
+			// Show the newly assigned symbol as a chip, plus a count badge for the full stack
+			let tmpResultVal2 = this.getVirtualSymbolValue(tmpVName, pResultObject);
+			let tmpStackHTML = `<span class="peq-ts-eval-sym peq-ts-eval-sym-new">${this.escapeHTML(tmpVName)} = ${tmpResultVal2}</span>`;
+			if (tmpSymbolsSoFar.length > 1)
+			{
+				tmpStackHTML += `<span class="peq-ts-eval-stack-badge" id="peq-ts-eval-stack-${i}" data-tooltip-lines="${this.escapeHTML(JSON.stringify(tmpTooltipLines))}">${tmpSymbolsSoFar.length} vars</span>`;
 			}
 
 			tmpHTML += `<div class="peq-ts-eval-step">
@@ -642,6 +763,74 @@ class PictViewExpressionTokenStack extends libPictViewClass
 	{
 		let tmpContent = this.buildVisualizationHTML();
 		this.services.ContentAssignment.assignContent('#PictSectionEquation-ExpressionTokenStack', tmpContent);
+		this.attachTruncatedValueTooltips('#PictSectionEquation-ExpressionTokenStack');
+		this._attachStackTooltips();
+	}
+
+	/**
+	 * Attach pict-section-modal tooltips to the stack badges
+	 * showing the full variable state at each evaluation step.
+	 */
+	_attachStackTooltips()
+	{
+		if (typeof document === 'undefined')
+		{
+			return;
+		}
+
+		// Clean up any previously attached tooltips
+		if (this._stackTooltipHandles)
+		{
+			for (let i = 0; i < this._stackTooltipHandles.length; i++)
+			{
+				this._stackTooltipHandles[i].destroy();
+			}
+		}
+		this._stackTooltipHandles = [];
+
+		let tmpModal = this.pict.views.PictSectionModal;
+		if (!tmpModal)
+		{
+			return;
+		}
+
+		let tmpBadges = document.querySelectorAll('.peq-ts-eval-stack-badge');
+		for (let i = 0; i < tmpBadges.length; i++)
+		{
+			let tmpBadge = tmpBadges[i];
+			let tmpDataAttr = tmpBadge.getAttribute('data-tooltip-lines');
+			if (!tmpDataAttr)
+			{
+				continue;
+			}
+			try
+			{
+				let tmpLines = JSON.parse(tmpDataAttr);
+				let tmpTooltipHTML = '<div style="font-family: monospace; font-size: 12px; line-height: 1.6;">';
+				for (let j = 0; j < tmpLines.length; j++)
+				{
+					let tmpLine = tmpLines[j];
+					let tmpColor = tmpLine.isNew ? '#4ade80' : '#d4d4d8';
+					let tmpWeight = tmpLine.isNew ? '700' : '400';
+					let tmpPrefix = tmpLine.isNew ? '\u25B6 ' : '';
+					tmpTooltipHTML += `<div style="color:${tmpColor}; font-weight:${tmpWeight};">${tmpPrefix}${tmpLine.name} = ${tmpLine.value}</div>`;
+				}
+				tmpTooltipHTML += '</div>';
+
+				let tmpHandle = tmpModal.richTooltip(tmpBadge, tmpTooltipHTML,
+				{
+					position: 'left',
+					delay: 100,
+					interactive: true,
+					maxWidth: '400px'
+				});
+				this._stackTooltipHandles.push(tmpHandle);
+			}
+			catch (pError)
+			{
+				// Graceful degradation — no tooltip if data is malformed
+			}
+		}
 	}
 
 	onAfterRender()

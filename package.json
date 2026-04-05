@@ -39,6 +39,7 @@
 		]
 	},
 	"dependencies": {
+		"pict-section-code": "^1.0.0",
 		"pict-view": "^1.0.67"
 	},
 	"devDependencies": {

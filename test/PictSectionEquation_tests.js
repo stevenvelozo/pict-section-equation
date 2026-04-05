@@ -766,13 +766,13 @@ suite
 
 						let tmpView = _Pict.addView('ExpressionSolvePyramid', {}, libPictViewExpressionSolvePyramid);
 
-						// (100 - 10) * (3 + 2) — root spans 2 leaf ops
+						// (100 - 10) * (3 + 2) — root spans 4 operand columns (2 per leaf op)
 						let tmpResult = {};
 						_Pict.ExpressionParser.solve('(100 - 10) * (3 + 2)', {}, tmpResult);
 						let tmpTree = tmpView.buildDependencyTree(tmpResult);
-						Expect(tmpTree.leafSpan).to.equal(2);
-						Expect(tmpTree.left.leafSpan).to.equal(1);
-						Expect(tmpTree.right.leafSpan).to.equal(1);
+						Expect(tmpTree.leafSpan).to.equal(4);
+						Expect(tmpTree.left.leafSpan).to.equal(2);
+						Expect(tmpTree.right.leafSpan).to.equal(2);
 						return fDone();
 					}
 				);

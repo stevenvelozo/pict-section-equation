@@ -1,20 +1,67 @@
 const libPictApplication = require('pict-application');
 const libPictView = require('pict-view');
+const libPictSectionCode = require('pict-section-code');
+const libPictSectionModal = require('pict-section-modal');
 
 const libPictSectionEquation = require('pict-section-equation');
 
 const html = String.raw;
 
-const _PRESET_EXPRESSIONS =
+// --- Equation Garden ---
+// Organized by category with expression, description, and sample variables.
+const _EQUATION_GARDEN =
 [
-	{ Label: 'Simple Math', Expression: '5 + 3 * 2', Data: '{}' },
-	{ Label: 'Order of Ops', Expression: '(100 - 10) * (3 + 2)', Data: '{}' },
-	{ Label: 'Assignment', Expression: 'Area = Width * Height', Data: '{"Width": 73.5, "Height": 28.8}' },
-	{ Label: 'Square Root', Expression: 'sqrt(16) + 2 ^ 3', Data: '{}' },
-	{ Label: 'Complex', Expression: 'Result = ((15000 * 2) / 4)^2 + 100 - 10 * (35 + 5)', Data: '{}' },
-	{ Label: 'Trig', Expression: 'sin(rad(60)) + cos(rad(30))', Data: '{}' },
-	{ Label: 'Variables', Expression: 'Result = (X + Y) * Z / 2', Data: '{"X": 12.5, "Y": 7.3, "Z": 4}' },
-	{ Label: 'Rounding', Expression: 'ROUND(X * Y * Z, 2)', Data: '{"X": 5.867, "Y": 3.1, "Z": 75}' }
+	{ Category: 'Arithmetic', Label: 'Simple Math', Expression: '5 + 3 * 2', Data: {} },
+	{ Category: 'Arithmetic', Label: 'Order of Operations', Expression: '(100 - 10) * (3 + 2)', Data: {} },
+	{ Category: 'Arithmetic', Label: 'Modulus', Expression: 'Result = 17 % 5', Data: {} },
+	{ Category: 'Arithmetic', Label: 'Exponents', Expression: 'Result = 2 ^ 10', Data: {} },
+	{ Category: 'Arithmetic', Label: 'Precision (0.1 + 0.2)', Expression: 'Result = 0.1 + 0.2', Data: {} },
+
+	{ Category: 'Assignment', Label: 'Area of Rectangle', Expression: 'Area = Width * Height', Data: { Width: 73.5, Height: 28.8 } },
+	{ Category: 'Assignment', Label: 'Variable Algebra', Expression: 'Result = (X + Y) * Z / 2', Data: { X: 12.5, Y: 7.3, Z: 4 } },
+	{ Category: 'Assignment', Label: 'Slope-Intercept (y = mx + b)', Expression: 'y = m * x + b', Data: { m: 1.5, x: 100, b: 750 } },
+
+	{ Category: 'Functions', Label: 'Square Root', Expression: 'sqrt(16) + 2 ^ 3', Data: {} },
+	{ Category: 'Functions', Label: 'Absolute Value', Expression: 'Result = abs(-42) + abs(7)', Data: {} },
+	{ Category: 'Functions', Label: 'Rounding', Expression: 'ROUND(X * Y * Z, 2)', Data: { X: 5.867, Y: 3.1, Z: 75 } },
+	{ Category: 'Functions', Label: 'Floor and Ceil', Expression: 'Result = floor(3.7) + ceil(3.2)', Data: {} },
+	{ Category: 'Functions', Label: 'Natural Log', Expression: 'Result = log(euler() ^ 3)', Data: {} },
+	{ Category: 'Functions', Label: 'Bezier Point', Expression: 'BezierMidpoint = BEZIERPOINT(0, 10, 20, 30, 0.5)', Data: {} },
+
+	{ Category: 'Trigonometry', Label: 'Sin and Cos', Expression: 'sin(rad(60)) + cos(rad(30))', Data: {} },
+	{ Category: 'Trigonometry', Label: 'Pythagorean Identity', Expression: 'Result = ROUND(sin(rad(30))^2 + cos(rad(30))^2, 10)', Data: {} },
+	{ Category: 'Trigonometry', Label: 'Pythagorean Components', Expression: 'Hypotenuse = sqrt(A ^ 2 + B ^ 2)', Data: { A: 3, B: 4 } },
+	{ Category: 'Trigonometry', Label: 'Law of Cosines', Expression: 'c = sqrt(a^2 + b^2 - 2*a*b*cos(rad(C)))', Data: { a: 5, b: 7, C: 60 } },
+
+	{ Category: 'Statistics', Label: 'SUM', Expression: 'Result = SUM(Vals)', Data: { Vals: [10, 20, 30, 40, 50] } },
+	{ Category: 'Statistics', Label: 'AVG', Expression: 'Result = AVG(Vals)', Data: { Vals: [10, 20, 30, 40, 50] } },
+	{ Category: 'Statistics', Label: 'MEDIAN', Expression: 'Result = MEDIAN(Vals)', Data: { Vals: [10, 20, 30, 40, 50] } },
+	{ Category: 'Statistics', Label: 'MIN and MAX Range', Expression: 'Range = MAX(Vals) - MIN(Vals)', Data: { Vals: [3, 7, 2, 9, 1] } },
+	{ Category: 'Statistics', Label: 'COUNT', Expression: 'Result = COUNT(Vals)', Data: { Vals: [10, 20, 30, 40, 50] } },
+	{ Category: 'Statistics', Label: 'Sample Variance (VAR)', Expression: 'Result = ROUND(VAR(Vals), 4)', Data: { Vals: [2, 4, 4, 4, 5, 5, 7, 9] } },
+	{ Category: 'Statistics', Label: 'Sample Std Dev (STDEV)', Expression: 'Result = ROUND(STDEV(Vals), 4)', Data: { Vals: [2, 4, 4, 4, 5, 5, 7, 9] } },
+	{ Category: 'Statistics', Label: 'Linear Regression (SLOPE)', Expression: 'SalesSlope = SLOPE(Revenue, Months)', Data: { Revenue: [150, 200, 250, 310, 350, 400, 460], Months: [1, 2, 3, 4, 5, 6, 7] } },
+	{ Category: 'Statistics', Label: 'Weighted Mean', Expression: 'Result = (W1*V1 + W2*V2 + W3*V3) / (W1 + W2 + W3)', Data: { W1: 0.5, V1: 80, W2: 0.3, V2: 90, W3: 0.2, V3: 70 } },
+
+	{ Category: 'Comparisons', Label: 'Greater Than', Expression: 'Result = 5 > 3', Data: {} },
+	{ Category: 'Comparisons', Label: 'Equality', Expression: 'Result = 5 == 5', Data: {} },
+	{ Category: 'Comparisons', Label: 'Ternary (If/Else)', Expression: 'Result = X > 0 ? X :: 0 - X', Data: { X: -5 } },
+	{ Category: 'Comparisons', Label: 'Nested Ternary', Expression: 'Result = 1 > 0 ? (2 > 3 ? 100 :: 200) :: 300', Data: {} },
+
+	{ Category: 'Finance', Label: 'Simple Interest', Expression: 'Interest = Principal * Rate * Time', Data: { Principal: 10000, Rate: 0.05, Time: 3 } },
+	{ Category: 'Finance', Label: 'Compound Interest', Expression: 'FutureValue = Principal * (1 + Rate / N) ^ (N * Time)', Data: { Principal: 10000, Rate: 0.08, N: 12, Time: 5 } },
+	{ Category: 'Finance', Label: 'Profit Margin', Expression: 'Margin = ROUND((Revenue - Cost) / Revenue * 100, 2)', Data: { Revenue: 50000, Cost: 32000 } },
+	{ Category: 'Finance', Label: 'Monthly Payment', Expression: 'Payment = ROUND(Loan * (Rate/12) / (1 - (1 + Rate/12)^(-Months)), 2)', Data: { Loan: 250000, Rate: 0.065, Months: 360 } },
+
+	{ Category: 'Physics', Label: 'Kinetic Energy', Expression: 'KE = 0.5 * Mass * Velocity ^ 2', Data: { Mass: 75, Velocity: 10 } },
+	{ Category: 'Physics', Label: 'Gravitational Force', Expression: 'Force = G * M1 * M2 / Distance ^ 2', Data: { G: 0.0000000000667, M1: 5972000000000000000000000, M2: 80, Distance: 6371000 } },
+	{ Category: 'Physics', Label: 'Projectile Range', Expression: 'Range = ROUND(V^2 * sin(rad(2*Angle)) / g, 2)', Data: { V: 50, Angle: 45, g: 9.81 } },
+
+	{ Category: 'Complex', Label: 'Nested Operations', Expression: 'Result = ((15000 * 2) / 4)^2 + 100 - 10 * (35 + 5)', Data: {} },
+	{ Category: 'Complex', Label: 'Multi-Step Calculation', Expression: 'Total = ROUND((Base * (1 + Markup)) * (1 - Discount) * Quantity, 2)', Data: { Base: 24.99, Markup: 0.4, Discount: 0.15, Quantity: 150 } },
+	{ Category: 'Complex', Label: 'BMI Calculator', Expression: 'BMI = ROUND(Weight / (Height ^ 2), 1)', Data: { Weight: 75, Height: 1.78 } },
+	{ Category: 'Complex', Label: 'Quadratic Discriminant', Expression: 'Discriminant = b^2 - 4*a*c', Data: { a: 2, b: -7, c: 3 } },
+	{ Category: 'Complex', Label: 'Health Index (Multi-Agg)', Expression: 'Result = ROUND((SUM(Calories) / SUM(Sugar)) * MEDIAN(Fat) + (SQRT(AVG(Protein)) - (PI() + 99)), 2)', Data: { Calories: [52, 89, 47, 50, 69], Sugar: [10, 12, 8, 10, 14], Fat: [0.2, 0.3, 0.1, 0.4, 0.5], Protein: [0.3, 1.1, 0.9, 1.0, 0.7] } }
 ];
 
 class SolveExplorerInputView extends libPictView
@@ -22,81 +69,122 @@ class SolveExplorerInputView extends libPictView
 	constructor(pFable, pOptions, pServiceHash)
 	{
 		super(pFable, pOptions, pServiceHash);
+
+		this._ExpressionTokenizedEditorView = null;
+		this._VariablesCodeEditorView = null;
+		this._JSONIndicatorTooltipHandle = null;
+		this._JSONParseError = '';
 	}
 
 	onAfterRender()
 	{
 		super.onAfterRender();
 
-		let tmpPresetsHTML = '';
-		for (let i = 0; i < _PRESET_EXPRESSIONS.length; i++)
+		let tmpSelf = this;
+
+		// Build the equation garden <select> with optgroups
+		let tmpSelectOptions = '<option value="">-- Select an equation --</option>';
+		let tmpCurrentCategory = '';
+		for (let i = 0; i < _EQUATION_GARDEN.length; i++)
 		{
-			tmpPresetsHTML += `<button class="peq-explorer-preset-btn" onclick="_Pict.views.SolveExplorerInput.loadPreset(${i})">${_PRESET_EXPRESSIONS[i].Label}</button>`;
+			if (_EQUATION_GARDEN[i].Category !== tmpCurrentCategory)
+			{
+				if (tmpCurrentCategory)
+				{
+					tmpSelectOptions += '</optgroup>';
+				}
+				tmpCurrentCategory = _EQUATION_GARDEN[i].Category;
+				tmpSelectOptions += `<optgroup label="${tmpCurrentCategory}">`;
+			}
+			tmpSelectOptions += `<option value="${i}">${_EQUATION_GARDEN[i].Label}</option>`;
+		}
+		if (tmpCurrentCategory)
+		{
+			tmpSelectOptions += '</optgroup>';
 		}
 
 		let tmpInputHTML = html`
 		<style>
-			.peq-explorer-header
+			.peq-explorer-toolbar
 			{
-				font-size: 24px;
-				font-weight: 700;
-				margin-bottom: 16px;
-				color: #0f172a;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				flex-wrap: wrap;
+				margin-bottom: 1rem;
 			}
-			.peq-explorer-header-sub
+			.peq-explorer-toolbar select
 			{
-				font-size: 14px;
-				font-weight: 400;
-				color: #64748b;
+				font-family: inherit;
+				font-size: 0.85rem;
+				padding: 0.45rem 0.6rem;
+				border: 1px solid #D4C4A8;
+				border-radius: 4px;
+				background: #FFFCF7;
+				color: #264653;
+				cursor: pointer;
+				min-width: 240px;
+			}
+			.peq-explorer-toolbar select:focus
+			{
+				outline: none;
+				border-color: #E76F51;
+				box-shadow: 0 0 0 2px rgba(231,111,81,0.15);
+			}
+			.peq-explorer-toolbar .separator
+			{
+				width: 1px;
+				height: 20px;
+				background: #D4C4A8;
+				margin: 0 2px;
+			}
+			.peq-explorer-overwrite-label
+			{
+				display: flex;
+				align-items: center;
+				gap: 5px;
+				font-size: 0.8rem;
+				color: #264653;
+				cursor: pointer;
+				user-select: none;
+			}
+			.peq-explorer-overwrite-label input[type="checkbox"]
+			{
+				cursor: pointer;
 			}
 			.peq-explorer-input-panel
 			{
-				background: white;
-				border: 1px solid #e2e8f0;
-				border-radius: 8px;
+				background: #fff;
+				border: 1px solid #D4C4A8;
+				border-radius: 6px;
 				padding: 16px;
 				margin-bottom: 20px;
+				box-shadow: 0 2px 8px rgba(38,70,83,0.08);
 			}
-			.peq-explorer-input-row
+			.peq-explorer-solve-row
 			{
 				display: flex;
-				gap: 12px;
-				margin-bottom: 12px;
-			}
-			.peq-explorer-expression-input
-			{
-				flex: 1;
-				padding: 10px 14px;
-				border: 2px solid #e2e8f0;
-				border-radius: 6px;
-				font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-				font-size: 14px;
-				outline: none;
-				transition: border-color 0.15s;
-			}
-			.peq-explorer-expression-input:focus
-			{
-				border-color: #6366f1;
+				justify-content: flex-end;
+				margin-top: 12px;
 			}
 			.peq-explorer-solve-btn
 			{
-				padding: 10px 24px;
-				background: #4f46e5;
-				color: white;
+				padding: 0.5rem 1.25rem;
+				background: #264653;
+				color: #FAEDCD;
 				border: none;
-				border-radius: 6px;
-				font-size: 14px;
+				border-radius: 4px;
+				font-size: 0.85rem;
 				font-weight: 600;
 				cursor: pointer;
-				transition: background 0.15s;
 			}
 			.peq-explorer-solve-btn:hover
 			{
-				background: #4338ca;
+				background: #1A3340;
 			}
 			.peq-explorer-data-row
 			{
-				margin-bottom: 12px;
+				margin-bottom: 8px;
 			}
 			.peq-explorer-data-label
 			{
@@ -104,96 +192,298 @@ class SolveExplorerInputView extends libPictView
 				font-weight: 600;
 				text-transform: uppercase;
 				letter-spacing: 0.05em;
-				color: #64748b;
+				color: #264653;
 				margin-bottom: 4px;
 			}
-			.peq-explorer-data-input
+			.peq-explorer-data-code-editor-container
 			{
 				width: 100%;
-				padding: 8px 12px;
-				border: 1px solid #e2e8f0;
-				border-radius: 6px;
-				font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-				font-size: 13px;
-				outline: none;
+				min-height: 40px;
+				border: 1px solid #D4C4A8;
+				border-radius: 4px;
+				overflow: auto;
+				box-sizing: border-box;
+				transition: border-color 0.15s;
 			}
-			.peq-explorer-data-input:focus
+			.peq-explorer-data-code-editor-container:focus-within
 			{
-				border-color: #6366f1;
+				border-color: #E76F51;
+				box-shadow: 0 0 0 2px rgba(231,111,81,0.15);
 			}
-			.peq-explorer-presets
+			.peq-explorer-data-code-editor-container .pict-code-editor-wrap
+			{
+				border: none;
+				border-radius: 0;
+			}
+			.peq-explorer-data-code-editor-container .pict-code-editor
+			{
+				font-size: 13px;
+			}
+			.peq-explorer-data-label-row
 			{
 				display: flex;
-				flex-wrap: wrap;
+				align-items: center;
 				gap: 8px;
+				margin-bottom: 4px;
 			}
-			.peq-explorer-presets-label
+			.peq-explorer-json-indicator
 			{
-				font-size: 12px;
-				font-weight: 600;
-				text-transform: uppercase;
-				letter-spacing: 0.05em;
-				color: #64748b;
-				margin-bottom: 6px;
+				display: inline-block;
+				width: 10px;
+				height: 10px;
+				border-radius: 50%;
+				background: #94a3b8;
+				transition: background 0.2s;
+				cursor: default;
 			}
-			.peq-explorer-preset-btn
+			.peq-explorer-json-indicator-valid
 			{
-				padding: 5px 12px;
-				background: #f1f5f9;
-				border: 1px solid #cbd5e1;
-				border-radius: 4px;
-				font-size: 12px;
-				cursor: pointer;
-				transition: background 0.15s;
+				background: #22c55e;
 			}
-			.peq-explorer-preset-btn:hover
+			.peq-explorer-json-indicator-invalid
 			{
-				background: #e2e8f0;
+				background: #ef4444;
 			}
 		</style>
-		<div class="peq-explorer-header">
-			Expression Solve Explorer
-			<div class="peq-explorer-header-sub">Visualize the inner workings of the Fable Expression Parser</div>
+		<div class="peq-explorer-toolbar">
+			<select id="SolveExplorer-EquationGarden" onchange="_Pict.views.SolveExplorerInput.loadEquation(this.value)">
+				${tmpSelectOptions}
+			</select>
+			<span class="separator"></span>
+			<label class="peq-explorer-overwrite-label">
+				<input type="checkbox" id="SolveExplorer-OverwriteVars" />
+				Overwrite variables
+			</label>
 		</div>
 		<div class="peq-explorer-input-panel">
-			<div class="peq-explorer-input-row">
-				<input type="text" id="SolveExplorer-Expression-Input" class="peq-explorer-expression-input" placeholder="Enter an expression (e.g. 5 + 3 * 2)" value="5 + 3 * 2" />
-				<button class="peq-explorer-solve-btn" onclick="_Pict.views.SolveExplorerInput.solveExpression()">Solve</button>
-			</div>
+			<div id="SolveExplorer-ExpressionTokenizedEditor-Container"></div>
 			<div class="peq-explorer-data-row">
-				<div class="peq-explorer-data-label">Variables (JSON)</div>
-				<input type="text" id="SolveExplorer-Data-Input" class="peq-explorer-data-input" placeholder='{"X": 5, "Y": 10}' value="{}" />
+				<div class="peq-explorer-data-label-row">
+					<div class="peq-explorer-data-label">Variables (JSON)</div>
+					<span class="peq-explorer-json-indicator" id="SolveExplorer-JSON-Indicator"></span>
+				</div>
+				<div class="peq-explorer-data-code-editor-container" id="SolveExplorer-Variables-CodeEditor-Container"></div>
 			</div>
-			<div class="peq-explorer-presets-label">Presets</div>
-			<div class="peq-explorer-presets">
-				${tmpPresetsHTML}
+			<div class="peq-explorer-solve-row">
+				<button class="peq-explorer-solve-btn" onclick="_Pict.views.SolveExplorerInput.solveExpression()">Solve</button>
 			</div>
 		</div>`;
 
 		this.services.ContentAssignment.assignContent('#SolveExplorer-Input-Container', tmpInputHTML);
 
+		// Create the tokenized expression editor view
+		this._ExpressionTokenizedEditorView = this.pict.addView(
+			'SolveExplorerTokenizedEditor',
+			Object.assign({}, libPictSectionEquation.PictViewExpressionTokenizedEditor.default_configuration,
+			{
+				ViewIdentifier: 'SolveExplorerTokenizedEditor',
+				DefaultDestinationAddress: '#SolveExplorer-ExpressionTokenizedEditor-Container',
+				AutoRender: false,
+				RenderOnLoad: false
+			}),
+			libPictSectionEquation.PictViewExpressionTokenizedEditor
+		);
+		this._ExpressionTokenizedEditorView.initialize();
+
+		// Wire expression changes to trigger solve
+		this._ExpressionTokenizedEditorView.onExpressionChanged = function(pExpression)
+		{
+			tmpSelf._debounceSolve();
+		};
+
+		this._ExpressionTokenizedEditorView.render();
+		this._ExpressionTokenizedEditorView.setExpression('5 + 3 * 2');
+
+		// Create the variables JSON code editor
+		let tmpVariablesEditorHash = 'SolveExplorerVariablesEditor';
+		this._VariablesCodeEditorView = this.pict.addView(
+			tmpVariablesEditorHash,
+			{
+				ViewIdentifier: tmpVariablesEditorHash,
+				TargetElementAddress: '#SolveExplorer-Variables-CodeEditor-Container',
+				Language: 'json',
+				ReadOnly: false,
+				LineNumbers: true,
+				DefaultCode: '{}',
+				AddClosing: true,
+				IndentOn: /[{[]$/,
+				MoveToNewLine: /^[}\]]/,
+				AutoRender: false,
+				RenderOnLoad: false,
+				DefaultRenderable: 'VariablesCodeEditor-Wrap',
+				DefaultDestinationAddress: '#SolveExplorer-Variables-CodeEditor-Container',
+				Renderables:
+				[
+					{
+						RenderableHash: 'VariablesCodeEditor-Wrap',
+						TemplateHash: 'CodeEditor-Container',
+						DestinationAddress: '#SolveExplorer-Variables-CodeEditor-Container'
+					}
+				]
+			},
+			libPictSectionCode
+		);
+		this._VariablesCodeEditorView.initialize();
+
+		// Wire variables changes to trigger solve
+		let tmpOriginalOnCodeChange = this._VariablesCodeEditorView.onCodeChange.bind(this._VariablesCodeEditorView);
+		this._VariablesCodeEditorView.onCodeChange = function(pCode)
+		{
+			tmpOriginalOnCodeChange(pCode);
+			tmpSelf._debounceSolve();
+		};
+
+		this._VariablesCodeEditorView.render();
+
+		// Attach tooltip to the JSON validity indicator
+		let tmpIndicatorEl = (typeof document !== 'undefined') ? document.getElementById('SolveExplorer-JSON-Indicator') : null;
+		if (tmpIndicatorEl && this.pict.views.PictSectionModal)
+		{
+			this._JSONIndicatorTooltipHandle = this.pict.views.PictSectionModal.tooltip(
+				tmpIndicatorEl, 'Valid', { position: 'right', delay: 100 });
+		}
+
 		// Auto-solve the default expression
 		this.solveExpression();
 	}
 
-	loadPreset(pIndex)
+	_debounceSolve()
 	{
-		if (pIndex < 0 || pIndex >= _PRESET_EXPRESSIONS.length)
+		if (this._SolveDebounceTimer)
+		{
+			clearTimeout(this._SolveDebounceTimer);
+		}
+		let tmpSelf = this;
+		this._SolveDebounceTimer = setTimeout(
+			function()
+			{
+				tmpSelf.solveExpression();
+			}, 150);
+	}
+
+	_updateJSONIndicator(pValid, pErrorMessage)
+	{
+		if (typeof document === 'undefined')
 		{
 			return;
 		}
-		let tmpPreset = _PRESET_EXPRESSIONS[pIndex];
-
-		let tmpExpressionElements = this.services.ContentAssignment.getElement('#SolveExplorer-Expression-Input');
-		let tmpDataElements = this.services.ContentAssignment.getElement('#SolveExplorer-Data-Input');
-
-		if (tmpExpressionElements && tmpExpressionElements.length > 0)
+		let tmpIndicatorEl = document.getElementById('SolveExplorer-JSON-Indicator');
+		if (!tmpIndicatorEl)
 		{
-			tmpExpressionElements[0].value = tmpPreset.Expression;
+			return;
 		}
-		if (tmpDataElements && tmpDataElements.length > 0)
+
+		tmpIndicatorEl.classList.remove('peq-explorer-json-indicator-valid', 'peq-explorer-json-indicator-invalid');
+		tmpIndicatorEl.classList.add(pValid ? 'peq-explorer-json-indicator-valid' : 'peq-explorer-json-indicator-invalid');
+
+		// Update the tooltip text
+		if (this._JSONIndicatorTooltipHandle)
 		{
-			tmpDataElements[0].value = tmpPreset.Data;
+			this._JSONIndicatorTooltipHandle.destroy();
+		}
+		let tmpModal = this.pict.views.PictSectionModal;
+		if (tmpModal)
+		{
+			let tmpText = pValid ? 'Valid' : ('Invalid: ' + (pErrorMessage || 'Parse error'));
+			this._JSONIndicatorTooltipHandle = tmpModal.tooltip(
+				tmpIndicatorEl, tmpText, { position: 'right', delay: 100 });
+		}
+	}
+
+	/**
+	 * Parse the current variables JSON from the editor, handling both
+	 * strict JSON and lenient JS-style object syntax.
+	 *
+	 * @returns {{ data: Object, valid: boolean, error: string }}
+	 */
+	_parseVariablesJSON()
+	{
+		let tmpCode = '';
+		if (this._VariablesCodeEditorView)
+		{
+			if (this._VariablesCodeEditorView.codeJar)
+			{
+				tmpCode = this._VariablesCodeEditorView.getCode() || '';
+			}
+			else
+			{
+				tmpCode = this._VariablesCodeEditorView.options.DefaultCode || '';
+			}
+		}
+
+		if (!tmpCode.trim())
+		{
+			return { data: {}, valid: true, error: '' };
+		}
+
+		try
+		{
+			return { data: JSON.parse(tmpCode), valid: true, error: '' };
+		}
+		catch(pError)
+		{
+			try
+			{
+				return { data: (new Function('return (' + tmpCode + ')'))(), valid: true, error: '' };
+			}
+			catch(pError2)
+			{
+				return { data: {}, valid: false, error: pError.message };
+			}
+		}
+	}
+
+	/**
+	 * Load an equation from the garden by index.
+	 * Merges or overwrites variables based on the checkbox state.
+	 *
+	 * @param {string|number} pIndex - The index into _EQUATION_GARDEN
+	 */
+	loadEquation(pIndex)
+	{
+		if (pIndex === '' || pIndex === undefined || pIndex === null)
+		{
+			return;
+		}
+
+		let tmpIndex = parseInt(pIndex, 10);
+		if (isNaN(tmpIndex) || tmpIndex < 0 || tmpIndex >= _EQUATION_GARDEN.length)
+		{
+			return;
+		}
+
+		let tmpEquation = _EQUATION_GARDEN[tmpIndex];
+
+		// Set the expression
+		if (this._ExpressionTokenizedEditorView)
+		{
+			this._ExpressionTokenizedEditorView.setExpression(tmpEquation.Expression);
+		}
+
+		// Determine merge vs overwrite
+		let tmpOverwrite = false;
+		if (typeof document !== 'undefined')
+		{
+			let tmpCheckbox = document.getElementById('SolveExplorer-OverwriteVars');
+			if (tmpCheckbox)
+			{
+				tmpOverwrite = tmpCheckbox.checked;
+			}
+		}
+
+		let tmpNewData = tmpEquation.Data || {};
+		let tmpFinalData = tmpNewData;
+
+		if (!tmpOverwrite)
+		{
+			// Merge: existing variables are preserved, new ones are added
+			let tmpParsed = this._parseVariablesJSON();
+			tmpFinalData = Object.assign({}, tmpParsed.data, tmpNewData);
+		}
+
+		if (this._VariablesCodeEditorView && this._VariablesCodeEditorView.codeJar)
+		{
+			this._VariablesCodeEditorView.setCode(JSON.stringify(tmpFinalData, null, '\t'));
 		}
 
 		this.solveExpression();
@@ -201,33 +491,25 @@ class SolveExplorerInputView extends libPictView
 
 	solveExpression()
 	{
-		let tmpExpressionElements = this.services.ContentAssignment.getElement('#SolveExplorer-Expression-Input');
-		let tmpDataElements = this.services.ContentAssignment.getElement('#SolveExplorer-Data-Input');
-
-		if (!tmpExpressionElements || tmpExpressionElements.length < 1)
+		let tmpExpression = '';
+		if (this._ExpressionTokenizedEditorView)
 		{
-			return;
+			tmpExpression = this._ExpressionTokenizedEditorView.getExpression();
 		}
 
-		let tmpExpression = tmpExpressionElements[0].value;
 		if (!tmpExpression || tmpExpression.trim().length < 1)
 		{
 			return;
 		}
 
-		let tmpDataSource = {};
-		if (tmpDataElements && tmpDataElements.length > 0)
+		let tmpParsed = this._parseVariablesJSON();
+		this._updateJSONIndicator(tmpParsed.valid, tmpParsed.error);
+		if (!tmpParsed.valid)
 		{
-			try
-			{
-				tmpDataSource = JSON.parse(tmpDataElements[0].value);
-			}
-			catch(pError)
-			{
-				this.log.warn(`Could not parse data JSON: ${pError.message}`);
-				tmpDataSource = {};
-			}
+			this.log.warn(`Could not parse data: ${tmpParsed.error}`);
 		}
+
+		let tmpDataSource = tmpParsed.data;
 
 		// Instantiate the expression parser if needed
 		this.fable.instantiateServiceProviderIfNotExists('ExpressionParser');
@@ -343,6 +625,7 @@ class SolveExplorerApplication extends libPictApplication
 	{
 		super(pFable, pOptions, pServiceHash);
 
+		this.pict.addView('PictSectionModal', {}, libPictSectionModal);
 		this.pict.addView('SolveExplorerLayout', _SolveExplorerLayoutViewConfiguration, SolveExplorerLayoutView);
 		this.pict.addView('SolveExplorerInput', _SolveExplorerInputViewConfiguration, SolveExplorerInputView);
 		this.pict.addView('ExpressionSolveVisualizer',

@@ -36,6 +36,13 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 
 		this.solveResultObject = false;
 		this.solveExpression = '';
+
+		// Toggle state for aligned expression rows and direction
+		this._showTopOriginal = false;
+		this._showTopResolved = false;
+		this._showBottomOriginal = true;
+		this._showBottomResolved = true;
+		this._invertDirection = false;
 	}
 
 	escapeHTML(pString)
@@ -49,6 +56,107 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			.replace(/</g, '&lt;')
 			.replace(/>/g, '&gt;')
 			.replace(/"/g, '&quot;');
+	}
+
+	/**
+	 * Format a numeric value for display, truncating excessive decimal precision.
+	 * Numbers with more than 10 digits after the decimal are truncated with an
+	 * italic ellipsis showing remaining digit count.  Integers longer than 15
+	 * digits use scientific notation.
+	 */
+	formatNumericValue(pValue)
+	{
+		if (pValue === undefined || pValue === null)
+		{
+			return '';
+		}
+		let tmpStr = String(pValue);
+		// Check if the string representation is numeric (handles number, Big.js, numeric strings)
+		if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(tmpStr))
+		{
+			return this.escapeHTML(tmpStr);
+		}
+		let tmpDotIndex = tmpStr.indexOf('.');
+		if (tmpDotIndex >= 0)
+		{
+			// Check for exponent notation in the string (e.g. from Big.js)
+			let tmpEIndex = tmpStr.search(/e/i);
+			let tmpDecimalPart = (tmpEIndex >= 0) ? tmpStr.substring(tmpDotIndex + 1, tmpEIndex) : tmpStr.substring(tmpDotIndex + 1);
+			if (tmpDecimalPart.length > 10)
+			{
+				let tmpTruncated = tmpStr.substring(0, tmpDotIndex + 11);
+				let tmpRemaining = tmpDecimalPart.length - 10;
+				let tmpFullEscaped = this.escapeHTML(tmpStr);
+				return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpTruncated}<i style="color:#6b7280; font-style:italic;">...${tmpRemaining} more...</i></span>`;
+			}
+			return tmpStr;
+		}
+		// Large integers: use scientific notation
+		let tmpAbsDigits = tmpStr.replace('-', '').length;
+		if (tmpAbsDigits > 15)
+		{
+			let tmpSciNotation = '';
+			if (typeof(pValue) === 'number')
+			{
+				tmpSciNotation = pValue.toExponential(10);
+			}
+			else
+			{
+				// For Big.js or string values, format manually
+				let tmpSign = tmpStr.startsWith('-') ? '-' : '';
+				let tmpDigits = tmpStr.replace('-', '');
+				let tmpMantissa = tmpDigits[0] + '.' + tmpDigits.substring(1, 11);
+				let tmpExponent = tmpDigits.length - 1;
+				tmpSciNotation = `${tmpSign}${tmpMantissa}e+${tmpExponent}`;
+			}
+			let tmpFullEscaped = this.escapeHTML(tmpStr);
+			return `<span class="peq-truncated-value" data-full-value="${tmpFullEscaped}" data-total-digits="${tmpStr.length}" style="cursor:pointer;">${tmpSciNotation}</span>`;
+		}
+		return tmpStr;
+	}
+
+	/**
+	 * Attach richTooltip from PictSectionModal to all truncated value spans
+	 * within the given container element.
+	 */
+	attachTruncatedValueTooltips(pContainerSelector)
+	{
+		if (typeof document === 'undefined')
+		{
+			return;
+		}
+		let tmpModal = this.pict.views.PictSectionModal;
+		if (!tmpModal)
+		{
+			return;
+		}
+
+		// Clean up any previously attached tooltips
+		if (!this._truncatedValueTooltips)
+		{
+			this._truncatedValueTooltips = [];
+		}
+		for (let i = 0; i < this._truncatedValueTooltips.length; i++)
+		{
+			this._truncatedValueTooltips[i].destroy();
+		}
+		this._truncatedValueTooltips = [];
+
+		let tmpContainer = document.querySelector(pContainerSelector);
+		if (!tmpContainer)
+		{
+			return;
+		}
+		let tmpSpans = tmpContainer.querySelectorAll('.peq-truncated-value');
+		for (let i = 0; i < tmpSpans.length; i++)
+		{
+			let tmpSpan = tmpSpans[i];
+			let tmpFullValue = tmpSpan.getAttribute('data-full-value');
+			let tmpTotalDigits = tmpSpan.getAttribute('data-total-digits');
+			let tmpTooltipHTML = `<div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace; font-size:12px; line-height:1.6; max-width:400px;"><div style="color:#94a3b8; font-size:11px; margin-bottom:4px;">${tmpTotalDigits} characters</div><div style="word-break:break-all; color:#f1f5f9;">${tmpFullValue}</div></div>`;
+			let tmpHandle = tmpModal.richTooltip(tmpSpan, tmpTooltipHTML, { position: 'top', delay: 100, maxWidth: '450px', interactive: true });
+			this._truncatedValueTooltips.push(tmpHandle);
+		}
 	}
 
 	/**
@@ -71,7 +179,7 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			{
 				return `[${tmpVal.length} items]`;
 			}
-			return String(tmpVal);
+			return this.formatNumericValue(tmpVal);
 		}
 		return '';
 	}
@@ -123,7 +231,7 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 		// Otherwise use the token's own value
 		if (pToken.Value !== undefined && pToken.Value !== null)
 		{
-			return String(pToken.Value);
+			return this.formatNumericValue(pToken.Value);
 		}
 		return String(pToken.Token || '');
 	}
@@ -229,11 +337,14 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 				tmpNode.right = buildNode(tmpStepMap[tmpRightVSym]);
 			}
 
-			// Calculate leaf span (how many leaf columns this subtree covers)
+			// Calculate leaf span: how many bottom-level operand columns
+			// this subtree covers.  A leaf operation (no child subtrees)
+			// counts its raw operands (2 for binary ops, 1 for functions).
+			// A non-leaf sums its children's spans plus any raw-operand side.
 			if (!tmpNode.left && !tmpNode.right)
 			{
-				// This node itself is a leaf operation (both operands are raw values)
-				tmpNode.leafSpan = 1;
+				// Leaf operation — count raw operands
+				tmpNode.leafSpan = tmpIsFunction ? 1 : 2;
 			}
 			else
 			{
@@ -245,7 +356,34 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			return tmpNode;
 		}
 
-		return buildNode(tmpRootStep);
+		let tmpTree = buildNode(tmpRootStep);
+
+		// Find the assignment target name (e.g. "Result", "Area") from the
+		// last solve step if it is an assignment operation.
+		if (tmpTree)
+		{
+			tmpTree.assignmentTarget = '';
+			// Use PostfixedAssignmentAddress for the user-facing name,
+			// falling back to the last assignment step's VirtualSymbolName.
+			if (pResultObject.PostfixedAssignmentAddress)
+			{
+				tmpTree.assignmentTarget = pResultObject.PostfixedAssignmentAddress;
+			}
+			else
+			{
+				let tmpLastStep = tmpSolveList[tmpSolveList.length - 1];
+				if (tmpLastStep)
+				{
+					let tmpLastOp = tmpLastStep.Operation ? tmpLastStep.Operation.Token : '';
+					if (tmpLastOp === '=')
+					{
+						tmpTree.assignmentTarget = tmpLastStep.VirtualSymbolName || '';
+					}
+				}
+			}
+		}
+
+		return tmpTree;
 	}
 
 	/**
@@ -265,6 +403,10 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 	/**
 	 * Collect all nodes at a specific depth level (0 = root).
 	 * Returns array of { node, colspan } objects in left-to-right order.
+	 *
+	 * When a branch terminates before the target level (a leaf operand),
+	 * a placeholder entry is emitted at the target level so the pyramid
+	 * table remains full-width at every row.
 	 */
 	collectNodesAtLevel(pNode, pTargetLevel, pCurrentLevel)
 	{
@@ -281,15 +423,21 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 		// Not at target level yet — recurse into children
 		let tmpResult = [];
 
+		// Calculate the span each side occupies so leaf placeholders fill
+		// the correct width when a branch terminates early.
+		let tmpLeftSpan = pNode.left ? pNode.left.leafSpan : (pNode.isFunction ? pNode.leafSpan : 1);
+		let tmpRightSpan = pNode.right ? pNode.right.leafSpan : 1;
+
 		if (pNode.left)
 		{
 			let tmpLeftNodes = this.collectNodesAtLevel(pNode.left, pTargetLevel, pCurrentLevel + 1);
 			tmpResult = tmpResult.concat(tmpLeftNodes);
 		}
-		else if (pCurrentLevel + 1 <= pTargetLevel)
+		else if (pCurrentLevel < pTargetLevel)
 		{
-			// Left is a leaf value, need placeholder at deeper levels
-			tmpResult.push({ node: null, colspan: 1, leafLabel: pNode.leftLabel, leafValue: pNode.leftResolved, leafTokenType: pNode.leftTokenType });
+			// Left is a leaf value — emit a placeholder at the target level
+			// spanning the full width this branch would have occupied.
+			tmpResult.push({ node: null, colspan: tmpLeftSpan, leafLabel: pNode.leftLabel, leafValue: pNode.leftResolved, leafTokenType: pNode.leftTokenType });
 		}
 
 		if (pNode.right)
@@ -297,10 +445,10 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			let tmpRightNodes = this.collectNodesAtLevel(pNode.right, pTargetLevel, pCurrentLevel + 1);
 			tmpResult = tmpResult.concat(tmpRightNodes);
 		}
-		else if (pCurrentLevel + 1 <= pTargetLevel && !pNode.isFunction)
+		else if (pCurrentLevel < pTargetLevel && !pNode.isFunction)
 		{
-			// Right is a leaf value, need placeholder at deeper levels
-			tmpResult.push({ node: null, colspan: 1, leafLabel: pNode.rightLabel, leafValue: pNode.rightResolved, leafTokenType: pNode.rightTokenType });
+			// Right is a leaf value — emit a placeholder at the target level.
+			tmpResult.push({ node: null, colspan: tmpRightSpan, leafLabel: pNode.rightLabel, leafValue: pNode.rightResolved, leafTokenType: pNode.rightTokenType });
 		}
 
 		return tmpResult;
@@ -337,13 +485,13 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 		}
 		if (pNode.isFunction)
 		{
-			return `${this.escapeHTML(pNode.operation)}(${this.escapeHTML(pNode.leftResolved)})`;
+			return `${this.escapeHTML(pNode.operation)}(${pNode.leftResolved})`;
 		}
 		if (pNode.isAssignment)
 		{
-			return `${this.escapeHTML(pNode.leftResolved)}`;
+			return `${pNode.leftResolved}`;
 		}
-		return `${this.escapeHTML(pNode.leftResolved)} ${this.escapeHTML(pNode.operation)} ${this.escapeHTML(pNode.rightResolved)}`;
+		return `${pNode.leftResolved} ${this.escapeHTML(pNode.operation)} ${pNode.rightResolved}`;
 	}
 
 	buildCSS()
@@ -572,6 +720,78 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 				color: #94a3b8;
 				font-style: italic;
 			}
+			.peq-sp-toolbar
+			{
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				flex-wrap: wrap;
+				margin-bottom: 10px;
+				font-size: 12px;
+				color: #475569;
+			}
+			.peq-sp-toolbar label
+			{
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				cursor: pointer;
+				user-select: none;
+			}
+			.peq-sp-toolbar input[type="checkbox"]
+			{
+				cursor: pointer;
+			}
+			.peq-sp-toolbar-group
+			{
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 3px 8px;
+				background: #f1f5f9;
+				border-radius: 4px;
+			}
+			.peq-sp-toolbar-group-label
+			{
+				font-weight: 600;
+				font-size: 10px;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+				color: #94a3b8;
+			}
+			.peq-sp-aligned-cell
+			{
+				text-align: center;
+				vertical-align: middle;
+				padding: 4px 6px;
+				font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+			}
+			.peq-sp-aligned-label
+			{
+				font-size: 12px;
+				font-weight: 600;
+				color: #334155;
+			}
+			.peq-sp-aligned-resolved
+			{
+				font-size: 11px;
+				color: #94a3b8;
+			}
+			.peq-sp-aligned-op
+			{
+				color: #dc2626;
+				font-weight: 700;
+			}
+			.peq-sp-aligned-row-top .peq-sp-aligned-cell
+			{
+				border-bottom: 2px solid #e2e8f0;
+				padding-bottom: 8px;
+			}
+			.peq-sp-aligned-row-bottom .peq-sp-aligned-cell
+			{
+				border-top: 2px solid #e2e8f0;
+				padding-top: 8px;
+			}
 		</style>`;
 	}
 
@@ -588,11 +808,22 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			tmpResolvedHTML = `<div class="peq-sp-resolved">${tmpResolved}</div>`;
 		}
 
+		// Show assignment target in the root cell symbol line
+		let tmpSymHTML = '';
+		if (pIsRoot && pNode.assignmentTarget)
+		{
+			tmpSymHTML = `<div class="peq-sp-sym">${this.escapeHTML(pNode.assignmentTarget)} = ${this.escapeHTML(pNode.symbolName)}</div>`;
+		}
+		else
+		{
+			tmpSymHTML = `<div class="peq-sp-sym">${this.escapeHTML(pNode.symbolName)}</div>`;
+		}
+
 		return `<td colspan="${pColspan}" class="${tmpCellClass}">
-			<div class="peq-sp-sym">${this.escapeHTML(pNode.symbolName)}</div>
+			${tmpSymHTML}
 			<div class="peq-sp-expr">${tmpExpr}</div>
 			${tmpResolvedHTML}
-			<div class="peq-sp-value">= ${this.escapeHTML(pNode.resolvedValue)}</div>
+			<div class="peq-sp-value">= ${pNode.resolvedValue}</div>
 		</td>`;
 	}
 
@@ -619,13 +850,149 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 			return `<td colspan="${pColspan}" class="peq-sp-cell peq-sp-cell-leaf peq-sp-cell-var">
 				<div class="peq-sp-var-badge">var</div>
 				<div class="peq-sp-leaf-label">${this.escapeHTML(pLabel)}</div>
-				<div class="peq-sp-leaf-value">= ${this.escapeHTML(pValue)}</div>
+				<div class="peq-sp-leaf-value">= ${pValue}</div>
 			</td>`;
 		}
 		return `<td colspan="${pColspan}" class="peq-sp-cell peq-sp-cell-leaf">
 			<div class="peq-sp-leaf-label">${this.escapeHTML(pLabel)}</div>
-			<div class="peq-sp-leaf-value">${this.escapeHTML(pValue)}</div>
+			<div class="peq-sp-leaf-value">${pValue}</div>
 		</td>`;
+	}
+
+	/**
+	 * Collect leaf operand tokens from the dependency tree in left-to-right
+	 * order, aligned to the pyramid column layout.  Each entry has:
+	 * { label, resolvedValue, colspan, tokenType, operator }
+	 *
+	 * operator is the operation token for the parent node, placed visually
+	 * between sibling operand pairs.
+	 */
+	collectAlignedLeafTokens(pNode, pResultObject)
+	{
+		if (!pNode)
+		{
+			return [];
+		}
+
+		let tmpTokens = [];
+		let tmpSelf = this;
+
+		function walkNode(pWalkNode)
+		{
+			// Leaf operation: both operands are raw values
+			if (!pWalkNode.left && !pWalkNode.right)
+			{
+				if (pWalkNode.isFunction)
+				{
+					// Function leaf: show as fn(arg)
+					tmpTokens.push({
+						label: pWalkNode.operation + '(' + pWalkNode.leftLabel + ')',
+						resolvedValue: pWalkNode.operation + '(' + pWalkNode.leftResolved + ')',
+						colspan: pWalkNode.leafSpan,
+						tokenType: 'function',
+						operator: ''
+					});
+				}
+				else
+				{
+					// Binary leaf: two operand cells
+					tmpTokens.push({
+						label: pWalkNode.leftLabel,
+						resolvedValue: pWalkNode.leftResolved,
+						colspan: 1,
+						tokenType: pWalkNode.leftTokenType,
+						operator: ''
+					});
+					tmpTokens.push({
+						label: pWalkNode.rightLabel,
+						resolvedValue: pWalkNode.rightResolved,
+						colspan: 1,
+						tokenType: pWalkNode.rightTokenType,
+						operator: pWalkNode.operation
+					});
+				}
+				return;
+			}
+
+			// Left side
+			if (pWalkNode.left)
+			{
+				walkNode(pWalkNode.left);
+			}
+			else
+			{
+				// Left is a raw operand leaf
+				tmpTokens.push({
+					label: pWalkNode.leftLabel,
+					resolvedValue: pWalkNode.leftResolved,
+					colspan: 1,
+					tokenType: pWalkNode.leftTokenType,
+					operator: ''
+				});
+			}
+
+			// Right side
+			if (pWalkNode.right)
+			{
+				// Tag the first token of the right subtree with the operator
+				let tmpBefore = tmpTokens.length;
+				walkNode(pWalkNode.right);
+				if (tmpTokens.length > tmpBefore)
+				{
+					tmpTokens[tmpBefore].operator = pWalkNode.operation;
+				}
+			}
+			else if (!pWalkNode.isFunction)
+			{
+				// Right is a raw operand leaf
+				tmpTokens.push({
+					label: pWalkNode.rightLabel,
+					resolvedValue: pWalkNode.rightResolved,
+					colspan: 1,
+					tokenType: pWalkNode.rightTokenType,
+					operator: pWalkNode.operation
+				});
+			}
+		}
+
+		walkNode(pNode);
+		return tmpTokens;
+	}
+
+	/**
+	 * Build an aligned expression table row from leaf tokens.
+	 *
+	 * @param {Array} pLeafTokens - From collectAlignedLeafTokens
+	 * @param {boolean} pShowResolved - Show resolved values below token labels
+	 * @param {string} pRowClass - CSS class for the row
+	 * @returns {string} HTML <tr> string
+	 */
+	buildAlignedExpressionRow(pLeafTokens, pShowResolved, pRowClass)
+	{
+		if (!pLeafTokens || pLeafTokens.length < 1)
+		{
+			return '';
+		}
+
+		let tmpHTML = `<tr class="${pRowClass}">`;
+		for (let i = 0; i < pLeafTokens.length; i++)
+		{
+			let tmpToken = pLeafTokens[i];
+			let tmpOpHTML = tmpToken.operator ? `<span class="peq-sp-aligned-op">${this.escapeHTML(tmpToken.operator)}</span> ` : '';
+			let tmpResolvedHTML = '';
+			if (pShowResolved)
+			{
+				tmpResolvedHTML = `<div class="peq-sp-aligned-resolved">${tmpOpHTML}${tmpToken.resolvedValue}</div>`;
+				tmpOpHTML = tmpToken.operator ? `<span class="peq-sp-aligned-op">${this.escapeHTML(tmpToken.operator)}</span> ` : '';
+			}
+
+			tmpHTML += `<td colspan="${tmpToken.colspan}" class="peq-sp-aligned-cell">
+				<div class="peq-sp-aligned-label">${tmpOpHTML}${this.escapeHTML(tmpToken.label)}</div>
+				${tmpResolvedHTML}
+			</td>`;
+		}
+		tmpHTML += '</tr>';
+		return tmpHTML;
 	}
 
 	buildPyramidHTML(pTree)
@@ -640,10 +1007,23 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 
 		let tmpHTML = `<table class="peq-sp-table">`;
 
-		// Render level by level, top (root) to bottom (leaves)
-		for (let tmpLevel = 0; tmpLevel < tmpDepth; tmpLevel++)
+		// Determine level iteration order based on direction
+		let tmpLevels = [];
+		for (let i = 0; i < tmpDepth; i++)
 		{
+			tmpLevels.push(i);
+		}
+		if (this._invertDirection)
+		{
+			tmpLevels.reverse();
+		}
+
+		// Render level by level
+		for (let li = 0; li < tmpLevels.length; li++)
+		{
+			let tmpLevel = tmpLevels[li];
 			let tmpNodes = this.collectNodesAtLevel(pTree, tmpLevel, 0);
+			let tmpIsRootRow = (tmpLevel === 0);
 
 			tmpHTML += '<tr>';
 			for (let j = 0; j < tmpNodes.length; j++)
@@ -651,7 +1031,7 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 				let tmpEntry = tmpNodes[j];
 				if (tmpEntry.node)
 				{
-					tmpHTML += this.buildNodeCellHTML(tmpEntry.node, tmpEntry.colspan, tmpLevel === 0);
+					tmpHTML += this.buildNodeCellHTML(tmpEntry.node, tmpEntry.colspan, tmpIsRootRow);
 				}
 				else
 				{
@@ -743,6 +1123,43 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 		return tmpHTML;
 	}
 
+	/**
+	 * Build the toolbar HTML for pyramid display options.
+	 */
+	buildToolbarHTML()
+	{
+		let tmpViewRef = `_Pict.views['${this.Hash}']`;
+
+		let tmpInvertChecked = this._invertDirection ? ' checked' : '';
+		let tmpTopOrigChecked = this._showTopOriginal ? ' checked' : '';
+		let tmpTopResChecked = this._showTopResolved ? ' checked' : '';
+		let tmpBotOrigChecked = this._showBottomOriginal ? ' checked' : '';
+		let tmpBotResChecked = this._showBottomResolved ? ' checked' : '';
+
+		return `<div class="peq-sp-toolbar">
+			<label><input type="checkbox"${tmpInvertChecked} onchange="${tmpViewRef}.toggleOption('_invertDirection', this.checked)" /> Invert</label>
+			<div class="peq-sp-toolbar-group">
+				<span class="peq-sp-toolbar-group-label">Top</span>
+				<label><input type="checkbox"${tmpTopOrigChecked} onchange="${tmpViewRef}.toggleOption('_showTopOriginal', this.checked)" /> Tokens</label>
+				<label><input type="checkbox"${tmpTopResChecked} onchange="${tmpViewRef}.toggleOption('_showTopResolved', this.checked)" /> Values</label>
+			</div>
+			<div class="peq-sp-toolbar-group">
+				<span class="peq-sp-toolbar-group-label">Bottom</span>
+				<label><input type="checkbox"${tmpBotOrigChecked} onchange="${tmpViewRef}.toggleOption('_showBottomOriginal', this.checked)" /> Tokens</label>
+				<label><input type="checkbox"${tmpBotResChecked} onchange="${tmpViewRef}.toggleOption('_showBottomResolved', this.checked)" /> Values</label>
+			</div>
+		</div>`;
+	}
+
+	/**
+	 * Toggle a display option and re-render.
+	 */
+	toggleOption(pOption, pValue)
+	{
+		this[pOption] = pValue;
+		this.renderVisualization();
+	}
+
 	buildVisualizationHTML()
 	{
 		let tmpResultObject = this.solveResultObject;
@@ -754,11 +1171,49 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 
 		let tmpExpression = ('RawExpression' in tmpResultObject) ? tmpResultObject.RawExpression : this.solveExpression;
 		let tmpTree = this.buildDependencyTree(tmpResultObject);
+		let tmpLeafTokens = this.collectAlignedLeafTokens(tmpTree, tmpResultObject);
+
+		// Build aligned rows for top and bottom
+		let tmpTopRows = '';
+		if (this._showTopOriginal)
+		{
+			tmpTopRows += this.buildAlignedExpressionRow(tmpLeafTokens, false, 'peq-sp-aligned-row-top');
+		}
+		if (this._showTopResolved)
+		{
+			tmpTopRows += this.buildAlignedExpressionRow(tmpLeafTokens, true, 'peq-sp-aligned-row-top');
+		}
+
+		let tmpBottomRows = '';
+		if (this._showBottomOriginal)
+		{
+			tmpBottomRows += this.buildAlignedExpressionRow(tmpLeafTokens, false, 'peq-sp-aligned-row-bottom');
+		}
+		if (this._showBottomResolved)
+		{
+			tmpBottomRows += this.buildAlignedExpressionRow(tmpLeafTokens, true, 'peq-sp-aligned-row-bottom');
+		}
+
+		// Inject aligned rows into the pyramid table
+		let tmpPyramidHTML = this.buildPyramidHTML(tmpTree);
+		if (tmpTopRows || tmpBottomRows)
+		{
+			// Insert top rows after <table> opening and bottom rows before </table> closing
+			if (tmpTopRows)
+			{
+				tmpPyramidHTML = tmpPyramidHTML.replace('<table class="peq-sp-table">', '<table class="peq-sp-table">' + tmpTopRows);
+			}
+			if (tmpBottomRows)
+			{
+				tmpPyramidHTML = tmpPyramidHTML.replace('</table>', tmpBottomRows + '</table>');
+			}
+		}
 
 		return `${this.buildCSS()}
 		<div class="peq-sp-expression">${this.escapeHTML(tmpExpression)}</div>
 		<div class="peq-sp-title">Solve Pyramid</div>
-		${this.buildPyramidHTML(tmpTree)}
+		${this.buildToolbarHTML()}
+		${tmpPyramidHTML}
 		${this.buildTokenSequenceHTML(tmpResultObject)}`;
 	}
 
@@ -773,6 +1228,7 @@ class PictViewExpressionSolvePyramid extends libPictViewClass
 	{
 		let tmpContent = this.buildVisualizationHTML();
 		this.services.ContentAssignment.assignContent('#PictSectionEquation-ExpressionSolvePyramid', tmpContent);
+		this.attachTruncatedValueTooltips('#PictSectionEquation-ExpressionSolvePyramid');
 	}
 
 	onAfterRender()
