@@ -43,7 +43,7 @@ Renders expression parser solve results as an interactive step-by-step display s
 
 **API:**
 
-- `setSolveResult(pResultObject, pExpression)` — set the solve data and re-render
+- `setSolveResult(pResultObject, pExpression)` -- set the solve data and re-render
 
 ## Example Application
 
