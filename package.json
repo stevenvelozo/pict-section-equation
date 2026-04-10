@@ -45,6 +45,6 @@
 	"devDependencies": {
 		"browser-env": "^3.3.0",
 		"pict": "^1.0.357",
-		"quackage": "^1.0.64"
+		"quackage": "^1.1.0"
 	}
 }
